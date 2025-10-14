@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Protocol
 
+import docker
+from docker.errors import DockerException
+
 
 class AlignmentMatcher(Protocol):
     """Common protocol for ontology matchers."""
@@ -21,30 +24,55 @@ class ContainerMatcher:
     """Containerized matcher definition.
 
     Each matcher is executed inside its dedicated Docker container. The class
-    stores the container image name and the command that should be executed to
-    perform the alignment.
+    stores the container image name and the expected output file name used when
+    invoking the matcher CLI inside the container.
     """
 
     name: str
     image: str
-    command_template: str
+    output_filename: str
 
     def align(self, source_ontology: Path, target_ontology: Path, output_dir: Path) -> Path:
-        from subprocess import check_call
-
         resolved_source = source_ontology.resolve()
         resolved_target = target_ontology.resolve()
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
-        mapping_path = output_dir / f"{self.name.lower()}.sssom.tsv"
-        command = self.command_template.format(
-            image=self.image,
-            source=resolved_source,
-            target=resolved_target,
-            output=mapping_path,
-            output_dir=output_dir,
-        )
-        check_call(command, shell=True)
+        mapping_path = output_dir / self.output_filename
+
+        client = docker.from_env()
+        try:
+            logs = client.containers.run(
+                image=self.image,
+                command=[
+                    "--source",
+                    "/data/source.owl",
+                    "--target",
+                    "/data/target.owl",
+                    "--output",
+                    f"/data/output/{self.output_filename}",
+                ],
+                volumes={
+                    str(resolved_source): {"bind": "/data/source.owl", "mode": "ro"},
+                    str(resolved_target): {"bind": "/data/target.owl", "mode": "ro"},
+                    str(output_dir): {"bind": "/data/output", "mode": "rw"},
+                },
+                remove=True,
+                detach=False,
+            )
+        except DockerException as exc:
+            raise RuntimeError(
+                f"Failed to run matcher container '{self.image}' for {self.name}"
+            ) from exc
+        finally:
+            try:
+                client.close()
+            except DockerException:
+                pass
+
+        if logs:
+            # The Docker SDK returns container logs as bytes when detach=False.
+            print(logs.decode("utf-8") if isinstance(logs, (bytes, bytearray)) else logs)
+
         return mapping_path
 
 
@@ -52,35 +80,17 @@ DEFAULT_MATCHERS: tuple[ContainerMatcher, ...] = (
     ContainerMatcher(
         name="LogMap",
         image="graph-mesh/logmap:latest",
-        command_template=(
-            "docker run --rm "
-            "-v {source}:/data/source.owl "
-            "-v {target}:/data/target.owl "
-            "-v {output_dir}:/data/output "
-            "{image} --source /data/source.owl --target /data/target.owl --output /data/output/logmap.sssom.tsv"
-        ),
+        output_filename="logmap.sssom.tsv",
     ),
     ContainerMatcher(
         name="AML",
         image="graph-mesh/aml:latest",
-        command_template=(
-            "docker run --rm "
-            "-v {source}:/data/source.owl "
-            "-v {target}:/data/target.owl "
-            "-v {output_dir}:/data/output "
-            "{image} --source /data/source.owl --target /data/target.owl --output /data/output/aml.sssom.tsv"
-        ),
+        output_filename="aml.sssom.tsv",
     ),
     ContainerMatcher(
         name="BERTMap",
         image="graph-mesh/bertmap:latest",
-        command_template=(
-            "docker run --rm "
-            "-v {source}:/data/source.owl "
-            "-v {target}:/data/target.owl "
-            "-v {output_dir}:/data/output "
-            "{image} --source /data/source.owl --target /data/target.owl --output /data/output/bertmap.sssom.tsv"
-        ),
+        output_filename="bertmap.sssom.tsv",
     ),
 )
 
