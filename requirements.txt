@@ -1,4 +1,5 @@
 rdflib
+xmlschema
 owlready2
 sssom
 pandas

@@ -1,4 +1,4 @@
-"""Unified pipeline orchestrating fetch → convert → align → fuse → validate."""
+"""Unified pipeline orchestrating fetch → ingest → align → fuse → validate."""
 
 from __future__ import annotations
 
@@ -11,15 +11,10 @@ import yaml
 from rdflib import Graph
 
 from graph_mesh_aligner.matchers import DEFAULT_MATCHERS, ContainerMatcher, run_alignment
-from graph_mesh_converters.base import SchemaConverter
-from graph_mesh_converters.xsd import XSDConverter
 from graph_mesh_core.meta_ontology import build_meta_graph, serialize_meta_graph
+from graph_mesh_orchestrator.ingest import run_ingest
 
 LOGGER = logging.getLogger(__name__)
-
-CONVERTER_REGISTRY: Dict[str, SchemaConverter] = {
-    "xsd": XSDConverter(),
-}
 
 MATCHER_REGISTRY: Dict[str, ContainerMatcher] = {matcher.name: matcher for matcher in DEFAULT_MATCHERS}
 
@@ -81,16 +76,6 @@ def fetch_source(source_cfg: SourceConfig, workdir: Path) -> Path:
     raise NotImplementedError(f"Unsupported fetch type: {fetch_type}")
 
 
-def convert_source(source_cfg: SourceConfig, source_path: Path, workdir: Path) -> Path:
-    convert_info = source_cfg.convert
-    converter_name = convert_info.get("type", "xsd")
-    converter = CONVERTER_REGISTRY.get(converter_name)
-    if converter is None:
-        raise KeyError(f"No converter registered for type '{converter_name}'")
-    output_dir = workdir / "converted" / source_cfg.identifier
-    return converter.convert(source_path, output_dir)
-
-
 def fuse_graphs(graphs: Iterable[Path], meta_graph: Graph, output_path: Path) -> Path:
     combined = Graph()
     combined += meta_graph
@@ -111,14 +96,20 @@ def orchestrate(manifest_path: Path, workdir: Path | None = None) -> PipelineArt
     meta_path = serialize_meta_graph(workdir / "meta" / "meta-ontology.ttl")
     meta_graph = build_meta_graph()
 
+    fetched: dict[str, Path] = {}
     converted: dict[str, Path] = {}
     mappings: dict[str, list[Path]] = {}
 
     for source in manifest.sources:
         LOGGER.info("Processing source %s", source.identifier)
         raw_path = fetch_source(source, workdir)
-        converted_path = convert_source(source, raw_path, workdir)
-        converted[source.identifier] = converted_path
+        fetched[source.identifier] = raw_path
+
+    LOGGER.info("Running ingest stage for %d sources", len(fetched))
+    converted.update(run_ingest(manifest.sources, fetched, workdir))
+
+    for source in manifest.sources:
+        converted_path = converted[source.identifier]
 
         matcher_names = manifest.matchers
         selected_matchers = [MATCHER_REGISTRY[name] for name in matcher_names]

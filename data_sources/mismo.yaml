@@ -1,0 +1,14 @@
+name: mismo-ingest
+sources:
+  - id: mismo
+    fetch:
+      type: local
+      path: data_sources/mismo/MISMO_3.6.2_Reference_Model.xsd
+    convert:
+      type: xsd
+matchers:
+  - LogMap
+  - AML
+  - BERTMap
+output:
+  directory: artifacts/mappings/mismo
