@@ -1,4 +1,4 @@
-FROM openjdk:17-jre-slim
+FROM eclipse-temurin:17-jre
 LABEL org.opencontainers.image.source="https://github.com/example/graph-mesh"
 
 RUN useradd -ms /bin/bash runner

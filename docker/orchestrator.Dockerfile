@@ -8,4 +8,4 @@ RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.
 
 COPY . .
 
-ENTRYPOINT ["python", "-m", "graph_mesh_orchestrator.pipeline"]
+# ENTRYPOINT ["python", "-m", "graph_mesh_orchestrator.pipeline"]
