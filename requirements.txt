@@ -4,3 +4,4 @@ sssom
 pandas
 tqdm
 pyyaml
+docker>=7.0.0
