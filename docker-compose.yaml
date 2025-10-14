@@ -28,4 +28,5 @@ services:
       - ./artifacts:/artifacts
       - ./data_sources:/data_sources
       - /var/run/docker.sock:/var/run/docker.sock
-    command: ["python", "-m", "graph_mesh_orchestrator.pipeline", "/data_sources/sample_manifest.yaml"]
+    entrypoint: ["python", "-m", "graph_mesh_orchestrator.pipeline"]
+    command: ["/data_sources/sample_manifest.yaml"]
