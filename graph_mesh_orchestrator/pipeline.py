@@ -1,0 +1,155 @@
+"""Unified pipeline orchestrating fetch → convert → align → fuse → validate."""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Iterable
+
+import yaml
+from rdflib import Graph
+
+from graph_mesh_aligner.matchers import DEFAULT_MATCHERS, ContainerMatcher, run_alignment
+from graph_mesh_converters.base import SchemaConverter
+from graph_mesh_converters.xsd import XSDConverter
+from graph_mesh_core.meta_ontology import build_meta_graph, serialize_meta_graph
+
+LOGGER = logging.getLogger(__name__)
+
+CONVERTER_REGISTRY: Dict[str, SchemaConverter] = {
+    "xsd": XSDConverter(),
+}
+
+MATCHER_REGISTRY: Dict[str, ContainerMatcher] = {matcher.name: matcher for matcher in DEFAULT_MATCHERS}
+
+
+@dataclass
+class SourceConfig:
+    identifier: str
+    fetch: dict
+    convert: dict
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SourceConfig":
+        return cls(
+            identifier=data["id"],
+            fetch=data.get("fetch", {}),
+            convert=data.get("convert", {}),
+        )
+
+
+@dataclass
+class PipelineManifest:
+    name: str
+    sources: list[SourceConfig]
+    matchers: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PipelineManifest":
+        sources = [SourceConfig.from_dict(item) for item in data.get("sources", [])]
+        return cls(
+            name=data["name"],
+            sources=sources,
+            matchers=data.get("matchers", [matcher.name for matcher in DEFAULT_MATCHERS]),
+        )
+
+
+@dataclass
+class PipelineArtifacts:
+    workdir: Path
+    meta_ontology: Path
+    converted: dict[str, Path]
+    mappings: dict[str, list[Path]]
+    merged_graph: Path
+
+
+def load_manifest(path: Path) -> PipelineManifest:
+    return PipelineManifest.from_dict(yaml.safe_load(path.read_text()))
+
+
+def fetch_source(source_cfg: SourceConfig, workdir: Path) -> Path:
+    """Retrieve source schema locally or from remote storage."""
+
+    fetch_info = source_cfg.fetch
+    fetch_type = fetch_info.get("type", "local")
+    if fetch_type == "local":
+        resolved = Path(fetch_info["path"]).resolve()
+        if not resolved.exists():
+            raise FileNotFoundError(f"Local source {resolved} does not exist")
+        return resolved
+    raise NotImplementedError(f"Unsupported fetch type: {fetch_type}")
+
+
+def convert_source(source_cfg: SourceConfig, source_path: Path, workdir: Path) -> Path:
+    convert_info = source_cfg.convert
+    converter_name = convert_info.get("type", "xsd")
+    converter = CONVERTER_REGISTRY.get(converter_name)
+    if converter is None:
+        raise KeyError(f"No converter registered for type '{converter_name}'")
+    output_dir = workdir / "converted" / source_cfg.identifier
+    return converter.convert(source_path, output_dir)
+
+
+def fuse_graphs(graphs: Iterable[Path], meta_graph: Graph, output_path: Path) -> Path:
+    combined = Graph()
+    combined += meta_graph
+    for graph_path in graphs:
+        combined.parse(graph_path)
+    combined.serialize(destination=output_path, format="turtle")
+    return output_path
+
+
+def orchestrate(manifest_path: Path, workdir: Path | None = None) -> PipelineArtifacts:
+    workdir = (workdir or Path("artifacts")).resolve()
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    LOGGER.info("Loading manifest from %s", manifest_path)
+    manifest = load_manifest(manifest_path)
+
+    LOGGER.info("Preparing meta-ontology scaffold")
+    meta_path = serialize_meta_graph(workdir / "meta" / "meta-ontology.ttl")
+    meta_graph = build_meta_graph()
+
+    converted: dict[str, Path] = {}
+    mappings: dict[str, list[Path]] = {}
+
+    for source in manifest.sources:
+        LOGGER.info("Processing source %s", source.identifier)
+        raw_path = fetch_source(source, workdir)
+        converted_path = convert_source(source, raw_path, workdir)
+        converted[source.identifier] = converted_path
+
+        matcher_names = manifest.matchers
+        selected_matchers = [MATCHER_REGISTRY[name] for name in matcher_names]
+        mapping_dir = workdir / "mappings" / source.identifier
+        mappings[source.identifier] = run_alignment(
+            selected_matchers,
+            converted_path,
+            meta_path,
+            mapping_dir,
+        )
+
+    merged_path = fuse_graphs(converted.values(), meta_graph, workdir / "graph-mesh-merged.ttl")
+
+    return PipelineArtifacts(
+        workdir=workdir,
+        meta_ontology=meta_path,
+        converted=converted,
+        mappings=mappings,
+        merged_graph=merged_path,
+    )
+
+
+def main(manifest_path: str) -> None:
+    logging.basicConfig(level=logging.INFO)
+    orchestrate(Path(manifest_path))
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the Graph-Mesh pipeline")
+    parser.add_argument("manifest", type=str, help="Path to pipeline manifest YAML")
+    args = parser.parse_args()
+    main(args.manifest)
