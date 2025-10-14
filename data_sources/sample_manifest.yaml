@@ -1,0 +1,12 @@
+name: sample-schema-ingestion
+matchers:
+  - LogMap
+  - AML
+  - BERTMap
+sources:
+  - id: sample-xsd
+    fetch:
+      type: local
+      path: data_sources/schemas/sample.xsd
+    convert:
+      type: xsd
