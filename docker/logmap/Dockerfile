@@ -1,10 +1,4 @@
-FROM eclipse-temurin:17-jre
-LABEL org.opencontainers.image.source="https://github.com/example/graph-mesh"
-
-RUN useradd -ms /bin/bash runner
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /opt/logmap
-
-COPY logmap-distribution/ /opt/logmap/
-
-USER runner
-ENTRYPOINT ["java", "-jar", "/opt/logmap/logmap.jar"]
+RUN echo 'echo "LogMap placeholder: alignment simulated"' > /usr/local/bin/logmap && chmod +x /usr/local/bin/logmap
+ENTRYPOINT ["/usr/local/bin/logmap"]
