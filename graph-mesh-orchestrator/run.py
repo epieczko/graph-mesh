@@ -1,7 +1,13 @@
-import os, yaml, subprocess, glob, sys
+import argparse
+import glob
+import subprocess
+import sys
 from pathlib import Path
 
-def run_step(name, cmd):
+from utils import load_yaml
+
+
+def run_step(name: str, cmd: str) -> None:
     print(f"🚀  Running step: {name}")
     result = subprocess.run(cmd, shell=True)
     if result.returncode != 0:
@@ -9,12 +15,26 @@ def run_step(name, cmd):
         sys.exit(result.returncode)
     print(f"✅  Step complete: {name}\n")
 
-def main():
-    manifests = glob.glob("data_sources/*.yaml")
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the Graph-Mesh pipeline")
+    parser.add_argument(
+        "--manifest",
+        dest="manifests",
+        action="append",
+        help="Specific manifest file(s) to execute",
+    )
+    args = parser.parse_args()
+
+    manifests = args.manifests if args.manifests else sorted(glob.glob("data_sources/*.yaml"))
+
     for manifest in manifests:
         print(f"📘 Loading manifest: {manifest}")
-        with open(manifest) as f:
-            cfg = yaml.safe_load(f)
+        cfg = load_yaml(manifest)
+        if "id" not in cfg or "source" not in cfg:
+            print(f"⚠️  Manifest {manifest} is missing required keys; skipping.")
+            continue
+
         sid = cfg["id"]
         src = cfg["source"]
         out_dir = Path("output") / sid
@@ -28,6 +48,7 @@ def main():
         run_step("validate", f"python graph-mesh-orchestrator/validate.py {manifest}")
 
     print("🏁  Graph-Mesh pipeline complete.")
+
 
 if __name__ == "__main__":
     main()

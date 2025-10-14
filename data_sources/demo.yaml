@@ -1,0 +1,11 @@
+id: demo
+source:
+  url: https://example.com/schema.xsd
+  format: xsd
+converter:
+  docker_image: demo-converter
+alignment:
+  matchers: [logmap, aml]
+validation:
+  reasoner: elk
+
