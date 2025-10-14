@@ -1,7 +1,7 @@
 # Graph-Mesh
 
 Graph-Mesh is a federated semantic integration platform that continuously
-fetches, converts, aligns, and validates heterogeneous schemas into a unified
+fetches, ingests, aligns, and validates heterogeneous schemas into a unified
 knowledge mesh. The repository is organized as a modular monorepo to support a
 composable ontology CI/CD workflow.
 
@@ -14,7 +14,7 @@ composable ontology CI/CD workflow.
 ├── docker-compose.yaml         # End-to-end pipeline orchestration
 ├── docs/                       # Architecture and usage documentation
 ├── graph_mesh_core/            # Meta-ontology definitions and reasoning utils
-├── graph_mesh_converters/      # Schema to OWL/RDF converter interfaces
+├── graph_mesh_ingest/          # Schema ingestion and conversion utilities
 ├── graph_mesh_aligner/         # Containerized matcher wrappers (LogMap, AML, BERTMap)
 ├── graph_mesh_orchestrator/    # Pipeline entry point
 └── README.md
@@ -57,6 +57,6 @@ sources:
       type: xsd
 ```
 
-Additional fetch types (HTTP, S3, Git) and converters (JSON Schema, CSV, SQL) can
+Additional fetch types (HTTP, S3, Git) and ingest converters (JSON Schema, CSV, SQL) can
 be registered without modifying the orchestrator. The goal is to make Graph-Mesh
 fully domain-agnostic and easily extendable.
