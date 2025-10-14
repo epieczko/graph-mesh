@@ -1,0 +1,18 @@
+name: Graph-Mesh Build
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Graph-Mesh pipeline
+        run: |
+          docker compose up --build --abort-on-container-exit
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: graph-mesh-results
+          path: output/

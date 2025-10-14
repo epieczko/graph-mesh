@@ -1,0 +1,20 @@
+version: '3.9'
+services:
+  orchestrator:
+    build: ./graph-mesh-orchestrator
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+    command: ["python", "run.py"]
+  logmap:
+    build: ./docker/logmap
+    volumes:
+      - ./data:/data
+  aml:
+    build: ./docker/aml
+    volumes:
+      - ./data:/data
+  bertmap:
+    build: ./docker/bertmap
+    volumes:
+      - ./data:/data
