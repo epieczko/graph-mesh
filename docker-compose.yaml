@@ -25,8 +25,8 @@ services:
       - aml
       - bertmap
     volumes:
-      - ./artifacts:/artifacts
-      - ./data_sources:/data_sources
+      - ./artifacts:/app/artifacts         # 👈 corrected mount
+      - ./data_sources:/app/data_sources
       - /var/run/docker.sock:/var/run/docker.sock
     entrypoint: ["python", "-m", "graph_mesh_orchestrator.pipeline"]
     command: ["/data_sources/sample_manifest.yaml"]
