@@ -1,14 +1,23 @@
 name: mismo-ingest
+description: MISMO 3.6.2 ingestion using multiple interdependent XSDs
+
 sources:
   - id: mismo
     fetch:
       type: local
-      path: data_sources/mismo/MISMO_3.6.2_Reference_Model.xsd
+      paths:
+        - data_sources/mismo/mismo_3.6.2_B73/MISMO_3.6.2_B373.xsd
+        - data_sources/mismo/mismo_3.6.2_B73/MISMO_3.6.2_B373_ext_helper.xsd
+        - data_sources/mismo/mismo_3.6.2_B73/xlinkMISMOB373.xsd
+        - data_sources/mismo/mismo_3.6.2_B73/xml.xsd
     convert:
       type: xsd
+      merge: true          # tells Graph-Mesh to treat multiple XSDs as one logical model
+
 matchers:
   - LogMap
   - AML
   - BERTMap
+
 output:
-  directory: artifacts/mappings/mismo
+  directory: artifacts/mappings/mismo/mismo_3.6.2_B73/

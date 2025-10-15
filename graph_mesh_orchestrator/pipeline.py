@@ -63,17 +63,26 @@ def load_manifest(path: Path) -> PipelineManifest:
     return PipelineManifest.from_dict(yaml.safe_load(path.read_text()))
 
 
-def fetch_source(source_cfg: SourceConfig, workdir: Path) -> Path:
-    """Retrieve source schema locally or from remote storage."""
-
-    fetch_info = source_cfg.fetch
+def fetch_source(source, workdir):
+    # source is a SourceConfig instance
+    fetch_info = source.fetch or {}
     fetch_type = fetch_info.get("type", "local")
+
+    # Handle multiple paths (list) or single path (string)
+    paths = fetch_info.get("paths") or [fetch_info.get("path")]
+    resolved_paths = [str(Path(p).resolve()) for p in paths if p]
+
     if fetch_type == "local":
-        resolved = Path(fetch_info["path"]).resolve()
-        if not resolved.exists():
-            raise FileNotFoundError(f"Local source {resolved} does not exist")
+        if len(resolved_paths) == 1:
+            resolved = resolved_paths[0]
+            print(f"📂  Using local file: {resolved}")
+        else:
+            resolved = resolved_paths
+            print(f"📂  Using multiple local files:\n    - " + "\n    - ".join(resolved))
         return resolved
+
     raise NotImplementedError(f"Unsupported fetch type: {fetch_type}")
+
 
 
 def fuse_graphs(graphs: Iterable[Path], meta_graph: Graph, output_path: Path) -> Path:
