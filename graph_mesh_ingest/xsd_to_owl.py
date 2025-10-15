@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+import tempfile
+from pathlib import Path
+from typing import Optional, Sequence
 
 import xmlschema
 from rdflib import Graph, Namespace, RDF, RDFS, OWL, Literal
@@ -41,4 +43,42 @@ def convert_xsd_to_owl(xsd_path: str, output_path: str, base_uri: Optional[str] 
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     graph.serialize(destination=output_path, format="xml")
+    return output_path
+
+
+def convert_xsd_list_to_owl(
+    xsd_paths: Sequence[str],
+    output_path: str,
+    base_uri: Optional[str] = None,
+) -> str:
+    """Convert and merge multiple XSDs into one OWL ontology.
+
+    Args:
+        xsd_paths: Collection of XSD document paths to merge.
+        output_path: Destination for the merged OWL ontology.
+        base_uri: Optional base namespace for the generated entities.
+
+    Returns:
+        The path to the merged OWL file.
+    """
+
+    if not xsd_paths:
+        raise ValueError("xsd_paths must contain at least one file path")
+
+    # Fast-path for single item to avoid unnecessary work
+    if len(xsd_paths) == 1:
+        return convert_xsd_to_owl(xsd_paths[0], output_path, base_uri)
+
+    merged_graph = Graph()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        for index, path in enumerate(xsd_paths):
+            # Reuse the single-file converter to maintain consistent transformation logic.
+            tmp_output = tmpdir_path / f"converted-{index}.owl"
+            convert_xsd_to_owl(path, str(tmp_output), base_uri)
+            merged_graph.parse(str(tmp_output))
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    merged_graph.serialize(destination=output_path, format="xml")
     return output_path

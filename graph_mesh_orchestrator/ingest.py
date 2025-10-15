@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping
 
@@ -34,14 +35,14 @@ def _get_convert_config(source: Any) -> Mapping[str, Any]:
 
 def run_ingest(
     sources: Iterable[Any],
-    fetched_paths: Mapping[str, Path],
+    fetched_paths: Mapping[str, Any],
     workdir: Path,
 ) -> Dict[str, Path]:
     """Run the ingest stage for each fetched source.
 
     Args:
         sources: Iterable of source configurations.
-        fetched_paths: Mapping of source identifier to fetched schema path.
+        fetched_paths: Mapping of source identifier to fetched schema path(s).
         workdir: Working directory for pipeline artifacts.
 
     Returns:
@@ -68,7 +69,18 @@ def run_ingest(
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{identifier}.owl"
 
-        converter(str(input_path), str(output_path))
+        if converter_name == "xsd":
+            from graph_mesh_ingest.xsd_to_owl import convert_xsd_list_to_owl
+
+            if isinstance(input_path, Sequence) and not isinstance(input_path, (str, Path)):
+                path_list = [str(Path(p)) for p in input_path]
+                print(f"🔧  Ingesting {len(path_list)} XSD files → {output_path}")
+                convert_xsd_list_to_owl(path_list, str(output_path))
+            else:
+                print(f"🔧  Ingesting single XSD → {output_path}")
+                converter(str(Path(input_path)), str(output_path))
+        else:
+            converter(str(input_path), str(output_path))
         results[identifier] = output_path
 
     return results
