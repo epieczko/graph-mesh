@@ -1,9 +1,13 @@
 """Recursive XSD to OWL converter with deep tree traversal."""
 from __future__ import annotations
+
 import os
-from typing import Optional
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Iterable, Optional
+
 import xmlschema
-from rdflib import Graph, Namespace, RDF, RDFS, OWL, Literal
+from rdflib import Graph, Namespace, OWL, RDF, RDFS, Literal
 
 
 def sanitize_name(name: str) -> str:
@@ -73,4 +77,36 @@ def convert_xsd_to_owl(xsd_path: str, output_path: str, base_uri: Optional[str] 
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     g.serialize(destination=output_path, format="xml")
+    return output_path
+
+
+def convert_xsd_list_to_owl(
+    xsd_paths: Iterable[str],
+    output_path: str,
+    base_uri: Optional[str] = None,
+) -> str:
+    """Merge multiple XSD schemas into a single OWL ontology file.
+
+    Each XSD is individually converted to OWL using :func:`convert_xsd_to_owl` and the
+    resulting graphs are merged together before being serialized to ``output_path``.
+    """
+
+    merged_graph = Graph()
+    for xsd_path in xsd_paths:
+        path_str = str(Path(xsd_path))
+        with NamedTemporaryFile(suffix=".owl", delete=False) as temp_file:
+            temp_path = temp_file.name
+        try:
+            convert_xsd_to_owl(path_str, temp_path, base_uri=base_uri)
+            temp_graph = Graph()
+            temp_graph.parse(temp_path)
+            merged_graph += temp_graph
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    merged_graph.serialize(destination=output_path, format="xml")
     return output_path

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping
 
 from graph_mesh_ingest.json_to_owl import convert_jsonschema_to_owl
-from graph_mesh_ingest.xsd_to_owl import convert_xsd_to_owl
+from graph_mesh_ingest.xsd_to_owl import convert_xsd_list_to_owl, convert_xsd_to_owl
 
 ConverterFunc = Callable[[str, str], str]
 
@@ -70,8 +70,6 @@ def run_ingest(
         output_path = output_dir / f"{identifier}.owl"
 
         if converter_name == "xsd":
-            from graph_mesh_ingest.xsd_to_owl import convert_xsd_list_to_owl
-
             if isinstance(input_path, Sequence) and not isinstance(input_path, (str, Path)):
                 path_list = [str(Path(p)) for p in input_path]
                 print(f"🔧  Ingesting {len(path_list)} XSD files → {output_path}")
