@@ -6,3 +6,5 @@ pandas
 tqdm
 pyyaml
 docker>=7.0.0
+pydantic>=2.0.0
+structlog>=24.0.0
