@@ -97,6 +97,37 @@ class SourceConfig(BaseModel):
         return v.strip()
 
 
+class MetaOntologyType(str, Enum):
+    """Supported meta-ontology types."""
+    GENERIC = "generic"
+    FIBO = "fibo"
+    CUSTOM = "custom"
+    COMPOSITE = "composite"
+
+
+class MetaOntologyConfig(BaseModel):
+    """Configuration for the meta-ontology provider."""
+
+    type: MetaOntologyType = Field(
+        default=MetaOntologyType.GENERIC,
+        description="Type of meta-ontology to use"
+    )
+    options: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Provider-specific options"
+    )
+
+    @field_validator('options')
+    @classmethod
+    def validate_options(cls, v: Dict[str, Any], info) -> Dict[str, Any]:
+        """Validate provider-specific options."""
+        # Note: Detailed validation happens in provider initialization
+        return v
+
+    class Config:
+        use_enum_values = True
+
+
 class AlignmentConfig(BaseModel):
     """Configuration for the alignment stage."""
 
@@ -135,6 +166,10 @@ class PipelineManifest(BaseModel):
     name: str = Field(..., description="Pipeline name/identifier")
     version: str = Field(default="1.0", description="Manifest version")
     description: Optional[str] = Field(default=None, description="Pipeline description")
+    meta_ontology: MetaOntologyConfig = Field(
+        default_factory=MetaOntologyConfig,
+        description="Meta-ontology provider configuration"
+    )
     sources: List[SourceConfig] = Field(..., min_length=1, description="List of data sources")
     matchers: List[str] = Field(
         default_factory=lambda: ["LogMap", "AML", "BERTMap"],

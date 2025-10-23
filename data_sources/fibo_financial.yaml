@@ -1,0 +1,37 @@
+name: fibo-financial-mesh
+description: Financial services schema integration using FIBO ontology
+
+# Configure FIBO as the meta-ontology
+meta_ontology:
+  type: fibo
+  options:
+    modules:
+      - FND    # Foundations (core concepts, parties, agreements)
+      - LOAN   # Loans and mortgages
+      - FBC    # Financial business and commerce
+    cache_dir: ./.graph-mesh-cache/fibo
+    use_cache: true
+
+sources:
+  - id: mismo
+    description: MISMO 3.6.2 mortgage schema
+    fetch:
+      type: local
+      paths:
+        - data_sources/mismo/mismo_3.6.2_B73/MISMO_3.6.2_B373.xsd
+        - data_sources/mismo/mismo_3.6.2_B73/MISMO_3.6.2_B373_ext_helper.xsd
+    convert:
+      type: xsd
+
+matchers:
+  - LogMap
+  - AML
+  - BERTMap
+
+alignment:
+  timeout: 600  # FIBO is large, needs more time
+  threshold: 0.6
+
+pipeline:
+  checkpoint_enabled: true
+  max_retries: 3

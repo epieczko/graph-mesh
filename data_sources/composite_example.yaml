@@ -1,0 +1,38 @@
+name: composite-ontology-mesh
+description: Combine FIBO with custom extensions for specialized financial integration
+
+# Composite meta-ontology combining multiple sources
+# Note: This requires programmatic configuration via Python API
+# See documentation for composite ontology usage
+
+# For now, use FIBO as primary ontology
+# To use composite, initialize via Python:
+# from graph_mesh_core.providers.fibo import FIBOMetaOntology
+# from graph_mesh_core.providers.custom import CustomMetaOntology
+# from graph_mesh_core.providers.composite import CompositeMetaOntology
+#
+# fibo = FIBOMetaOntology(modules=["FND", "LOAN"])
+# custom = CustomMetaOntology(source="./extensions.ttl", namespace="https://my.org/ext#")
+# composite = CompositeMetaOntology(providers=[fibo, custom], name="FIBO+Extensions")
+
+meta_ontology:
+  type: fibo
+  options:
+    modules:
+      - FND
+      - LOAN
+
+sources:
+  - id: mismo
+    fetch:
+      type: local
+      path: data_sources/mismo/mismo_3.6.2_B73/MISMO_3.6.2_B373.xsd
+    convert:
+      type: xsd
+
+matchers:
+  - LogMap
+  - AML
+
+alignment:
+  timeout: 600
