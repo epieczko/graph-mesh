@@ -8,8 +8,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping
-import logging
+from typing import Any, Callable, Dict, Iterable, Mapping
+
+import structlog
+
+from graph_mesh_ingest.json_to_owl import convert_jsonschema_to_owl
+from graph_mesh_ingest.xsd_to_owl import convert_xsd_list_to_owl, convert_xsd_to_owl
+from graph_mesh_orchestrator.errors import ConverterNotAvailableError, IngestError
+
+logger = structlog.get_logger(__name__)
 
 from graph_mesh_ingest import get_converter, ConverterRegistry
 from graph_mesh_ingest.xsd_to_owl import convert_xsd_list_to_owl
@@ -27,13 +34,20 @@ def _get_identifier(source: Any) -> str:
         Source identifier
 
     Raises:
+        IngestError: If identifier cannot be extracted
+    """
+    if hasattr(source, "id"):
+        return getattr(source, "id")
         KeyError: If identifier not found
     """
     if hasattr(source, "identifier"):
         return getattr(source, "identifier")
     if isinstance(source, Mapping) and "id" in source:
         return str(source["id"])
-    raise KeyError("Source configuration must define an identifier")
+    raise IngestError(
+        "Source configuration must define an identifier",
+        source_id="unknown"
+    )
 
 
 def _get_convert_config(source: Any) -> Mapping[str, Any]:
@@ -46,7 +60,13 @@ def _get_convert_config(source: Any) -> Mapping[str, Any]:
         Conversion configuration dictionary
     """
     if hasattr(source, "convert"):
-        return getattr(source, "convert") or {}
+        convert_obj = getattr(source, "convert")
+        # Handle pydantic models
+        if hasattr(convert_obj, "model_dump"):
+            return convert_obj.model_dump()
+        elif hasattr(convert_obj, "dict"):
+            return convert_obj.dict()
+        return convert_obj or {}
     if isinstance(source, Mapping):
         return source.get("convert", {})
     return {}
@@ -71,6 +91,8 @@ def run_ingest(
         Mapping of source identifier to OWL output path.
 
     Raises:
+        IngestError: If ingestion fails for any source
+        ConverterNotAvailableError: If converter is not registered
         KeyError: If converter type not registered or source not found
         ValueError: If conversion fails
     """
@@ -78,58 +100,96 @@ def run_ingest(
     converted_root = workdir / "converted"
     converted_root.mkdir(parents=True, exist_ok=True)
 
-    # Log available converters
-    available_converters = ConverterRegistry.list_converters()
-    logger.info(f"Available converters: {', '.join(available_converters)}")
+    logger.info("ingest_starting", source_count=len(list(sources)))
 
     for source in sources:
-        identifier = _get_identifier(source)
-        convert_cfg = _get_convert_config(source)
-
-        # Get converter type (default to 'xsd' for backward compatibility)
-        converter_type = convert_cfg.get("type", "xsd")
-
-        # Get converter configuration
-        converter_config = convert_cfg.get("config", {})
-
-        # Get input path
-        input_path = fetched_paths.get(identifier)
-        if input_path is None:
-            raise KeyError(f"No fetched artifact found for source '{identifier}'")
-
-        # Setup output paths
-        output_dir = converted_root / identifier
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{identifier}.owl"
-
-        # Handle XSD with multiple files (special case for backward compatibility)
-        if converter_type == "xsd" and isinstance(input_path, Sequence) and not isinstance(input_path, (str, Path)):
-            path_list = [str(Path(p)) for p in input_path]
-            print(f"🔧  Ingesting {len(path_list)} XSD files → {output_path}")
-            convert_xsd_list_to_owl(path_list, str(output_path))
-            results[identifier] = output_path
-            continue
-
-        # Get converter instance
-        converter = get_converter(converter_type, converter_config)
-        if converter is None:
-            raise KeyError(
-                f"No converter registered for type '{converter_type}'. "
-                f"Available types: {', '.join(available_converters)}"
-            )
-
-        # Convert schema
+        identifier = None
         try:
-            print(f"🔧  Converting {converter_type.upper()} → {output_path}")
-            logger.info(f"Converting {identifier} using {converter.__class__.__name__}")
+            identifier = _get_identifier(source)
+            log = logger.bind(source_id=identifier)
 
-            converter.convert(str(input_path), str(output_path))
+            convert_cfg = _get_convert_config(source)
+            converter_name = convert_cfg.get("type", "xsd")
+
+            log.debug("ingest_config", converter_type=converter_name, config=convert_cfg)
+
+            converter = CONVERTER_REGISTRY.get(converter_name)
+            if converter is None:
+                raise ConverterNotAvailableError(converter_name)
+
+            input_path = fetched_paths.get(identifier)
+            if input_path is None:
+                raise IngestError(
+                    f"No fetched artifact found for source",
+                    source_id=identifier,
+                    converter_type=converter_name
+                )
+
+            output_dir = converted_root / identifier
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / f"{identifier}.owl"
+
+            # Handle different converter types
+            if converter_name == "xsd":
+                if isinstance(input_path, Sequence) and not isinstance(input_path, (str, Path)):
+                    # Multiple XSD files
+                    path_list = [str(Path(p)) for p in input_path]
+                    log.info("ingesting_multiple_xsd", count=len(path_list), output=str(output_path))
+                    try:
+                        convert_xsd_list_to_owl(path_list, str(output_path))
+                    except Exception as e:
+                        raise IngestError(
+                            f"Failed to convert multiple XSD files: {str(e)}",
+                            source_id=identifier,
+                            converter_type=converter_name,
+                            input_path=str(path_list)
+                        ) from e
+                else:
+                    # Single XSD file
+                    log.info("ingesting_single_xsd", input=str(input_path), output=str(output_path))
+                    try:
+                        converter(str(Path(input_path)), str(output_path))
+                    except Exception as e:
+                        raise IngestError(
+                            f"Failed to convert XSD file: {str(e)}",
+                            source_id=identifier,
+                            converter_type=converter_name,
+                            input_path=str(input_path)
+                        ) from e
+            else:
+                # Generic converter
+                log.info("ingesting_schema", converter=converter_name, input=str(input_path), output=str(output_path))
+                try:
+                    converter(str(input_path), str(output_path))
+                except Exception as e:
+                    raise IngestError(
+                        f"Conversion failed: {str(e)}",
+                        source_id=identifier,
+                        converter_type=converter_name,
+                        input_path=str(input_path)
+                    ) from e
+
+            # Verify output was created
+            if not output_path.exists():
+                raise IngestError(
+                    "Converter succeeded but output file not found",
+                    source_id=identifier,
+                    converter_type=converter_name,
+                    input_path=str(input_path)
+                )
+
             results[identifier] = output_path
+            log.info("ingest_complete", output=str(output_path))
 
-            logger.info(f"Successfully converted {identifier} to {output_path}")
-
+        except (IngestError, ConverterNotAvailableError):
+            raise
         except Exception as e:
-            logger.error(f"Failed to convert {identifier}: {e}")
-            raise ValueError(f"Conversion failed for {identifier}: {e}")
+            # Catch-all for unexpected errors
+            raise IngestError(
+                f"Unexpected error during ingestion: {str(e)}",
+                source_id=identifier or "unknown",
+                converter_type=convert_cfg.get("type", "unknown") if 'convert_cfg' in locals() else "unknown"
+            ) from e
 
+    logger.info("ingest_complete", converted_count=len(results))
     return results
