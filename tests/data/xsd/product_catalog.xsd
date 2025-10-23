@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:prod="http://example.org/product-catalog"
+           targetNamespace="http://example.org/product-catalog"
+           elementFormDefault="qualified">
+
+    <xs:complexType name="Product">
+        <xs:annotation>
+            <xs:documentation>A product in the catalog</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="description" type="xs:string" minOccurs="0"/>
+            <xs:element name="price" type="xs:decimal"/>
+            <xs:element name="inStock" type="xs:boolean"/>
+            <xs:element name="category" type="xs:string"/>
+            <xs:element name="releaseDate" type="xs:date" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="sku" type="xs:string" use="required"/>
+        <xs:attribute name="manufacturer" type="xs:string"/>
+    </xs:complexType>
+
+    <xs:element name="ProductCatalog">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="product" type="prod:Product" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>
