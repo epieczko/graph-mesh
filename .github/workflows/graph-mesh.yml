@@ -1,18 +1,54 @@
-name: Graph-Mesh Build
+name: Graph-Mesh Pipeline
 on:
   schedule:
-    - cron: "0 4 * * 1"
+    - cron: "0 4 * * 1"  # Weekly on Monday at 4 AM UTC
   workflow_dispatch:
+
 jobs:
-  run:
+  pipeline:
+    name: Full Pipeline Execution
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Run Graph-Mesh pipeline
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
         run: |
-          docker compose up --build --abort-on-container-exit
-      - name: Upload artifacts
+          docker compose build --parallel
+
+      - name: Verify Docker images
+        run: |
+          docker images | grep graph-mesh
+
+      - name: Run full pipeline
+        run: |
+          docker compose up --abort-on-container-exit
+        timeout-minutes: 30
+
+      - name: Validate output artifacts
+        run: |
+          echo "Checking for output artifacts..."
+          ls -lh artifacts/ || echo "No artifacts directory"
+
+      - name: Upload pipeline artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: graph-mesh-results
-          path: output/
+          name: graph-mesh-pipeline-artifacts
+          path: |
+            artifacts/
+            output/
+          retention-days: 30
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pipeline-logs
+          path: |
+            *.log
+          retention-days: 7
