@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "http://example.org/schemas/user-profile",
+  "title": "UserProfile",
+  "description": "A user profile schema",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "username": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 30
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "firstName": {"type": "string"},
+        "lastName": {"type": "string"},
+        "bio": {"type": "string"},
+        "website": {"type": "string", "format": "uri"}
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "notifications": {"type": "boolean"},
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark", "auto"]
+        }
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["userId", "username", "email"]
+}

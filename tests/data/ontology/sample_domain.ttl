@@ -1,0 +1,55 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sample: <http://example.org/sample-domain#> .
+
+# Ontology Declaration
+sample: a owl:Ontology ;
+    rdfs:label "Sample Domain Ontology" ;
+    rdfs:comment "A simple domain ontology for testing alignment" .
+
+# Classes
+sample:Organization a owl:Class ;
+    rdfs:label "Organization" ;
+    rdfs:comment "An organized group of people with a particular purpose" .
+
+sample:Person a owl:Class ;
+    rdfs:label "Person" ;
+    rdfs:comment "A human being" .
+
+sample:Event a owl:Class ;
+    rdfs:label "Event" ;
+    rdfs:comment "An occurrence at a specific time and place" .
+
+# Object Properties
+sample:memberOf a owl:ObjectProperty ;
+    rdfs:label "member of" ;
+    rdfs:domain sample:Person ;
+    rdfs:range sample:Organization .
+
+sample:organizes a owl:ObjectProperty ;
+    rdfs:label "organizes" ;
+    rdfs:domain sample:Organization ;
+    rdfs:range sample:Event .
+
+sample:attends a owl:ObjectProperty ;
+    rdfs:label "attends" ;
+    rdfs:domain sample:Person ;
+    rdfs:range sample:Event .
+
+# Datatype Properties
+sample:name a owl:DatatypeProperty ;
+    rdfs:label "name" ;
+    rdfs:domain sample:Person ;
+    rdfs:range xsd:string .
+
+sample:organizationName a owl:DatatypeProperty ;
+    rdfs:label "organization name" ;
+    rdfs:domain sample:Organization ;
+    rdfs:range xsd:string .
+
+sample:eventDate a owl:DatatypeProperty ;
+    rdfs:label "event date" ;
+    rdfs:domain sample:Event ;
+    rdfs:range xsd:dateTime .
