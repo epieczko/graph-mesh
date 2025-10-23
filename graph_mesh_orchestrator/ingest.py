@@ -1,4 +1,8 @@
-"""Ingest stage for the Graph Mesh orchestrator."""
+"""Ingest stage for the Graph Mesh orchestrator.
+
+This module uses the graph_mesh_ingest plugin system to convert various
+schema formats (XSD, JSON Schema, CSV/TSV) to OWL ontologies.
+"""
 
 from __future__ import annotations
 
@@ -14,19 +18,17 @@ from graph_mesh_orchestrator.errors import ConverterNotAvailableError, IngestErr
 
 logger = structlog.get_logger(__name__)
 
-ConverterFunc = Callable[[str, str], str]
+from graph_mesh_ingest import get_converter, ConverterRegistry
+from graph_mesh_ingest.xsd_to_owl import convert_xsd_list_to_owl
 
-CONVERTER_REGISTRY: Dict[str, ConverterFunc] = {
-    "xsd": convert_xsd_to_owl,
-    "json": convert_jsonschema_to_owl,
-}
+logger = logging.getLogger(__name__)
 
 
 def _get_identifier(source: Any) -> str:
     """Extract identifier from source configuration.
 
     Args:
-        source: Source configuration object
+        source: Source configuration object or mapping
 
     Returns:
         Source identifier
@@ -36,6 +38,8 @@ def _get_identifier(source: Any) -> str:
     """
     if hasattr(source, "id"):
         return getattr(source, "id")
+        KeyError: If identifier not found
+    """
     if hasattr(source, "identifier"):
         return getattr(source, "identifier")
     if isinstance(source, Mapping) and "id" in source:
@@ -47,13 +51,13 @@ def _get_identifier(source: Any) -> str:
 
 
 def _get_convert_config(source: Any) -> Mapping[str, Any]:
-    """Extract convert configuration from source.
+    """Extract conversion configuration from source.
 
     Args:
-        source: Source configuration object
+        source: Source configuration object or mapping
 
     Returns:
-        Convert configuration dictionary
+        Conversion configuration dictionary
     """
     if hasattr(source, "convert"):
         convert_obj = getattr(source, "convert")
@@ -75,6 +79,9 @@ def run_ingest(
 ) -> Dict[str, Path]:
     """Run the ingest stage for each fetched source.
 
+    Converts schemas to OWL using the appropriate converter based on the
+    schema type specified in the source configuration.
+
     Args:
         sources: Iterable of source configurations.
         fetched_paths: Mapping of source identifier to fetched schema path(s).
@@ -86,6 +93,8 @@ def run_ingest(
     Raises:
         IngestError: If ingestion fails for any source
         ConverterNotAvailableError: If converter is not registered
+        KeyError: If converter type not registered or source not found
+        ValueError: If conversion fails
     """
     results: Dict[str, Path] = {}
     converted_root = workdir / "converted"

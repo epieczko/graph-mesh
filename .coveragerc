@@ -1,0 +1,82 @@
+[run]
+# Coverage configuration for graph-mesh
+
+# Source directories to measure
+source =
+    graph_mesh_core
+    graph_mesh_ingest
+    graph_mesh_orchestrator
+    graph_mesh_aligner
+
+# Patterns to omit from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */.venv/*
+    */build/*
+    */dist/*
+    */.tox/*
+    */setup.py
+    */__init__.py
+
+# Branch coverage (more thorough)
+branch = True
+
+# Parallel mode for multiprocessing
+parallel = False
+
+[report]
+# Reporting configuration
+precision = 2
+show_missing = True
+skip_covered = False
+skip_empty = False
+
+# Sorting
+sort = Cover
+
+# Exclude patterns (lines to ignore)
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug code
+    def __repr__
+    def __str__
+
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+    # Don't complain about abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+
+    # Don't complain about type checking imports
+    if typing.TYPE_CHECKING:
+
+    # Don't complain about ellipsis in protocols
+    \.\.\.
+
+[html]
+# HTML report configuration
+directory = htmlcov
+title = Graph-Mesh Test Coverage Report
+
+[xml]
+# XML report for CI/CD systems
+output = coverage.xml
+
+[paths]
+# Source paths for combining coverage data
+source =
+    graph_mesh_core/
+    graph_mesh_ingest/
+    graph_mesh_orchestrator/
+    graph_mesh_aligner/
