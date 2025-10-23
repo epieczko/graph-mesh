@@ -1,20 +1,33 @@
 version: "3.9"
 services:
+  # Ontology matchers
   logmap:
     build: ./docker/logmap
     image: graph-mesh/logmap:latest
     volumes:
       - ./artifacts:/artifacts
+
   aml:
     build: ./docker/aml
     image: graph-mesh/aml:latest
     volumes:
       - ./artifacts:/artifacts
+
   bertmap:
     build: ./docker/bertmap
     image: graph-mesh/bertmap:latest
     volumes:
       - ./artifacts:/artifacts
+
+  # XSD to OWL converter (Ontmalizer)
+  ontmalizer:
+    build: ./docker/ontmalizer
+    image: graph-mesh/ontmalizer:latest
+    volumes:
+      - ./artifacts:/artifacts
+    # Service container, no default command
+
+  # Main orchestrator
   orchestrator:
     build:
       context: .
@@ -24,9 +37,12 @@ services:
       - logmap
       - aml
       - bertmap
+      - ontmalizer
     volumes:
-      - ./artifacts:/app/artifacts         # 👈 corrected mount
+      - ./artifacts:/app/artifacts
       - ./data_sources:/app/data_sources
       - /var/run/docker.sock:/var/run/docker.sock
     entrypoint: ["python", "-m", "graph_mesh_orchestrator.pipeline"]
     command: ["/data_sources/sample_manifest.yaml"]
+    environment:
+      - PYTHONUNBUFFERED=1

@@ -1,0 +1,18 @@
+[run]
+source = graph_mesh_core,graph_mesh_ingest,graph_mesh_aligner,graph_mesh_orchestrator
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */virtualenv/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
