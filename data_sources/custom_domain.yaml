@@ -1,0 +1,31 @@
+name: custom-domain-mesh
+description: Integration using a custom domain ontology
+
+# Load custom ontology from file or URL
+meta_ontology:
+  type: custom
+  options:
+    source: "https://example.org/my-domain-ontology.owl"
+    namespace: "https://example.org/domain#"
+    name: "MyDomainOntology"
+    version: "2.0"
+    format: "xml"  # RDF/XML format
+
+sources:
+  - id: my-schema
+    fetch:
+      type: local
+      path: data_sources/schemas/my_schema.json
+    convert:
+      type: json
+
+matchers:
+  - LogMap
+  - AML
+
+alignment:
+  timeout: 300
+  threshold: 0.7
+
+pipeline:
+  checkpoint_enabled: true

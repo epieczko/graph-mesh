@@ -1,0 +1,27 @@
+name: generic-exploration
+description: Domain-agnostic schema exploration using generic meta-ontology
+
+# Use the simple 7-class generic ontology
+meta_ontology:
+  type: generic
+  # No options needed for generic
+
+sources:
+  - id: sample-xsd
+    description: Sample XSD schema for testing
+    fetch:
+      type: local
+      path: data_sources/schemas/sample.xsd
+    convert:
+      type: xsd
+
+matchers:
+  - LogMap
+
+alignment:
+  timeout: 300
+  threshold: 0.5
+
+pipeline:
+  checkpoint_enabled: false  # Quick exploration, no checkpoints needed
+  fail_fast: true

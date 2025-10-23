@@ -15,7 +15,9 @@ import yaml
 from rdflib import Graph
 
 from graph_mesh_aligner.matchers import DEFAULT_MATCHERS, ContainerMatcher, run_alignment
-from graph_mesh_core.meta_ontology import build_meta_graph, serialize_meta_graph
+from graph_mesh_core.meta_ontology import build_meta_graph, serialize_meta_graph  # Backward compat
+from graph_mesh_core.meta_ontology_registry import MetaOntologyRegistry
+from graph_mesh_core.meta_ontology_base import MetaOntologyProvider
 from graph_mesh_orchestrator.errors import (
     CheckpointError,
     FetchError,
@@ -58,6 +60,8 @@ MATCHER_REGISTRY: Dict[str, ContainerMatcher] = {matcher.name: matcher for match
 class PipelineArtifacts:
     workdir: Path
     meta_ontology: Path
+    meta_ontology_provider_name: str
+    meta_ontology_provider_version: str
     converted: dict[str, Path]
     mappings: dict[str, list[Path]]
     merged_graph: Path
@@ -300,21 +304,58 @@ def orchestrate(
     mappings: dict[str, list[Path]] = {}
 
     try:
-        # Stage 1: Meta-ontology preparation
+        # Stage 1: Meta-ontology preparation with pluggable providers
         if not checkpoint.meta_ontology_path:
             log.info("stage_meta_ontology", stage="preparation")
             checkpoint.state = PipelineState.VALIDATING
             checkpoint.current_stage = "meta_ontology"
             save_checkpoint(checkpoint, workdir)
 
-            meta_path = serialize_meta_graph(workdir / "meta" / "meta-ontology.ttl")
+            # Create meta-ontology provider from manifest config
+            provider_config = {
+                "type": manifest.meta_ontology.type.value if hasattr(manifest.meta_ontology.type, 'value') else str(manifest.meta_ontology.type),
+                "options": manifest.meta_ontology.options
+            }
+
+            log.info("creating_meta_ontology_provider", config=provider_config)
+            provider = MetaOntologyRegistry.create(provider_config)
+            provider_info = provider.get_info()
+
+            log.info("meta_ontology_provider_loaded",
+                     provider_name=provider_info.name,
+                     provider_version=provider_info.version,
+                     provider_namespace=provider_info.namespace,
+                     provider_description=provider_info.description)
+
+            # Build ontology graph
+            meta_graph = provider.build_graph()
+            log.info("meta_ontology_built", triple_count=len(meta_graph))
+
+            # Serialize with provider-specific naming
+            provider_name_safe = provider_info.name.lower().replace(" ", "-")
+            meta_filename = f"{provider_name_safe}-meta-ontology.ttl"
+            meta_path = workdir / "meta" / meta_filename
+            meta_path.parent.mkdir(parents=True, exist_ok=True)
+            meta_graph.serialize(destination=str(meta_path), format="turtle")
+
             checkpoint.meta_ontology_path = str(meta_path)
             save_checkpoint(checkpoint, workdir)
+
+            log.info("meta_ontology_serialized", path=str(meta_path))
+
         else:
+            # Resuming from checkpoint - recreate provider
             meta_path = Path(checkpoint.meta_ontology_path)
             log.info("meta_ontology_exists", path=str(meta_path))
 
-        meta_graph = build_meta_graph()
+            # Recreate provider from manifest
+            provider_config = {
+                "type": manifest.meta_ontology.type.value if hasattr(manifest.meta_ontology.type, 'value') else str(manifest.meta_ontology.type),
+                "options": manifest.meta_ontology.options
+            }
+            provider = MetaOntologyRegistry.create(provider_config)
+            provider_info = provider.get_info()
+            meta_graph = provider.build_graph()
 
         # Stage 2: Fetch sources
         log.info("stage_fetch", stage="fetch", source_count=len(manifest.sources))
@@ -385,7 +426,10 @@ def orchestrate(
             save_checkpoint(checkpoint, workdir)
 
         # Stage 4: Alignment
-        log.info("stage_alignment", stage="alignment")
+        log.info("stage_alignment",
+                 stage="alignment",
+                 meta_ontology_provider=provider_info.name,
+                 alignment_targets_available=len(provider.get_alignment_targets()))
         checkpoint.state = PipelineState.ALIGNING
         checkpoint.current_stage = "alignment"
         save_checkpoint(checkpoint, workdir)
@@ -432,12 +476,17 @@ def orchestrate(
                 save_checkpoint(checkpoint, workdir)
 
         # Stage 5: Fusion
-        log.info("stage_fusion", stage="fusion")
+        log.info("stage_fusion",
+                 stage="fusion",
+                 meta_ontology_provider=provider_info.name)
         checkpoint.state = PipelineState.FUSING
         checkpoint.current_stage = "fusion"
         save_checkpoint(checkpoint, workdir)
 
-        merged_path = fuse_graphs(converted.values(), meta_graph, workdir / "graph-mesh-merged.ttl")
+        # Include provider name in merged graph filename
+        provider_name_safe = provider_info.name.lower().replace(" ", "-")
+        merged_filename = f"graph-mesh-merged-{provider_name_safe}.ttl"
+        merged_path = fuse_graphs(converted.values(), meta_graph, workdir / merged_filename)
         checkpoint.merged_graph_path = str(merged_path)
 
         # Mark as complete
@@ -445,11 +494,16 @@ def orchestrate(
         checkpoint.current_stage = "completed"
         save_checkpoint(checkpoint, workdir)
 
-        log.info("pipeline_complete", merged_graph=str(merged_path))
+        log.info("pipeline_complete",
+                 merged_graph=str(merged_path),
+                 meta_ontology_provider=provider_info.name,
+                 meta_ontology_version=provider_info.version)
 
         return PipelineArtifacts(
             workdir=workdir,
             meta_ontology=meta_path,
+            meta_ontology_provider_name=provider_info.name,
+            meta_ontology_provider_version=provider_info.version,
             converted=converted,
             mappings=mappings,
             merged_graph=merged_path,
@@ -484,6 +538,8 @@ def main(manifest_path: str, workdir: Optional[str] = None, resume: bool = False
         logger.info("pipeline_success", artifacts={
             "workdir": str(artifacts.workdir),
             "meta_ontology": str(artifacts.meta_ontology),
+            "meta_ontology_provider": artifacts.meta_ontology_provider_name,
+            "meta_ontology_version": artifacts.meta_ontology_provider_version,
             "merged_graph": str(artifacts.merged_graph),
             "converted_count": len(artifacts.converted),
         })
